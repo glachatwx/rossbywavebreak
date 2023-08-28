@@ -30,7 +30,7 @@ os.chdir(path_py)
 import wavebreakpy as rwb
 
 data = Dataset("../data/ERA5DTfield_1979reGrid.nc")
-theta_ex = np.array(data.variables['DT_theta'][0])
+theta_ex = np.array(data.variables['DT_theta'][9])
 lat_theta = np.array(data.variables['lat'])
 lon_theta = np.array(data.variables['lon'])
 theta_3_worlds = np.concatenate((theta_ex,theta_ex,theta_ex,theta_ex[:,0].reshape(-1,1)),1)
@@ -48,7 +48,7 @@ lat_dist_thres = 40 # degrees latitude maximum of identified overturning
 lon_width_thres = 5 # degrees longitude minimum of identified overturning
 #%% Calling the contour function and getting the QuadContour output
 plt.figure(dpi = 1000)
-cs = plt.contour(lat_ext[:,1:],lon_ext[:,1:],theta_3_worlds[:,1:],[theta_levels[8]])
+cs = plt.contour(lat_ext[:,1:],lon_ext[:,1:],theta_3_worlds[:,1:],[theta_levels[10]])
 contour_coord = cs.allsegs[0]
 # plt.close()
 # The step below will combine all the polygons vertices into one array (identical to the C_round in MATLAB)
@@ -110,8 +110,11 @@ if len(c_round_cont) > 0:
                 # Ensure that a crossing does not occur at neighboring points (indices)
                 # Convert from array to integer for indexing purposes
                 inds = int(inds)
+                # Allow for the edges to be captured (i.e., 1080 can throw an IndexError)
+                if np.logical_and(lons == 1080, inds == len(c_round_cont) - 1):
+                    inds = -1
                 prior_lon = c_round_cont[inds-1][1]
-                current_lon = c_round_cont[inds][1]
+                current_lon = c_round_cont[inds][1]            
                 next_lon = c_round_cont[inds+1][1]
                 # Find the starting point of the overturning contour
                 if np.logical_and(prior_lon!=current_lon,current_lon!=next_lon):

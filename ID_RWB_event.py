@@ -38,10 +38,9 @@ LC1_bounds_all= []
 LC2_bounds_all = []
 LC1_centroids_all = []
 LC2_centroids_all = []
-RWB_event = []   
-matrix_cluster_mean = []  
 matrix_cluster_mean_all = []  
-for time_step in np.arange(0,4):
+for time_step in np.arange(0,10):
+        print(time_step)
         theta_3_worlds = np.concatenate((theta_ex[time_step],theta_ex[time_step],theta_ex[time_step],theta_ex[time_step,:,0].reshape(-1,1)),1)
         theta_3_worlds = np.swapaxes(theta_3_worlds,0,1)
         for isentrope in theta_levels:
@@ -69,13 +68,13 @@ for time_step in np.arange(0,4):
         matrix_cluster_mean = []
         isentrope_dist_all = []
         possible_overturning_region_idx_all = []
-        for isentrope_c, centroids in enumerate(LC1_centroids_all):
+        for isentrope_c, centroids in enumerate(LC2_centroids_all):
             # Only analyze isentropes that have been found to be overturning
             if len(centroids) > 0:
                 for cen_idx,lat_lons in enumerate(centroids):
                     if np.logical_and(lat_lons[1] >=360, lat_lons[1] <720):
                         event_centroids_mid.append([lat_lons[0],lat_lons[1],theta_levels[isentrope_c]])  
-                        event_bounds_mid.append(LC1_bounds_all[isentrope_c][cen_idx])
+                        event_bounds_mid.append(LC2_bounds_all[isentrope_c][cen_idx])
         event_centroids_mid = np.stack(event_centroids_mid)
         event_bounds_mid = np.stack(event_bounds_mid)
         # Calculate the Haversine distance between identified overturning contours
@@ -126,8 +125,14 @@ for time_step in np.arange(0,4):
                 east_bound = np.max(overturning_region_bounds[:,3])
                 matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
                                                     north_bound,south_bound,west_bound,east_bound])
-                # Convert the list into an array for easier usage
-        matrix_cluster_mean_all.append(np.stack(matrix_cluster_mean))
+                
+        # For no RWBs identified 
+        if len(matrix_cluster_mean) < 1:
+            matrix_cluster_mean_all.append(matrix_cluster_mean)
+        # For RWBs that are identified
+        else:
+            # Convert the list into an array for easier usage
+            matrix_cluster_mean_all.append(np.stack(matrix_cluster_mean))
         # Make sure to clear lists for each time step
         LC1_centroids_all = []
         LC2_centroids_all = []

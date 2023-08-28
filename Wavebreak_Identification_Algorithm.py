@@ -44,7 +44,7 @@ LC1_bounds_all= []
 LC2_bounds_all = []
 matrix_cluster_mean_all = []
 RWB_event_all = []
-for time_step in np.arange(0,2):
+for time_step in np.arange(0,10):
         print(time_step)
         theta_3_worlds = np.concatenate((theta_ex[time_step],theta_ex[time_step],theta_ex[time_step],theta_ex[time_step,:,0].reshape(-1,1)),1)
         theta_3_worlds = np.swapaxes(theta_3_worlds,0,1)
@@ -62,13 +62,13 @@ for time_step in np.arange(0,2):
             LC2_centroids_all.append(LC2_centroids)
             LC1_bounds_all.append(LC1_bounds)
             LC2_bounds_all.append(LC2_bounds)
-        matrix_cluster_mean, RWB_event = rwb.RWB_events(LC1_centroids_all,LC1_bounds_all,theta_levels,
+            
+        matrix_cluster_mean, RWB_event = rwb.RWB_events(LC2_centroids_all,LC2_bounds_all,theta_levels,
                                                         wavebreak_thres, num_of_overturning)
         matrix_cluster_mean_all.append(matrix_cluster_mean)
         RWB_event_all.append(RWB_event)
-        LC1_all = []
-        LC2_all = []
+        # Clear out the lists for each time step 
         LC1_centroids_all = []
         LC2_centroids_all = []
         LC1_bounds_all = []
-        LC2_bounds_all =[ ]
+        LC2_bounds_all = []

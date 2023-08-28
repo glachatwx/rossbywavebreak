@@ -1352,6 +1352,9 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
                     # Ensure that a crossing does not occur at neighboring points (indices)
                     # Convert from array to integer for indexing purposes
                     inds = int(inds)
+                    # Allow for the edges to be captured (i.e., 1080 can throw an IndexError)
+                    if np.logical_and(lons == 1080, inds == len(c_round_cont) - 1):
+                        inds = -1
                     prior_lon = c_round_cont[inds-1][1]
                     current_lon = c_round_cont[inds][1]
                     next_lon = c_round_cont[inds+1][1]
@@ -1496,15 +1499,15 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
     return c_round_cont_spur, LC1, LC2, LC1_centroids, LC2_centroids, LC1_bounds, LC2_bounds
 #%% Function to identify overturning contours into regions that are wave breaking event
 def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, num_of_overturning):
-#   Limit the dataset to only include overturning contours from the middle domain (360 to 720) 
-    # and determine the haversine distance between isentropic levels
+    # These lists will create the variables of interest for 
     event_centroids_mid = []
     event_bounds_mid = []
     isentrope_dist = []
     RWB_event = []
     matrix_cluster_mean = []
+    matrix_cluster_mean_all = []
     isentrope_dist_all = []
-    a = []
+    possible_overturning_region_idx_all = []
     for isentrope_c, centroids in enumerate(LC_centroids_all):
         # Only analyze isentropes that have been found to be overturning
         if len(centroids) > 0:
@@ -1525,28 +1528,50 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, nu
                 isentrope_dist[idxs] = haversine(overt_cont[1], overt_cont[0], overt_cont2[1], overt_cont2[0], 'deg')
             for idxs in same_isentropes:
                 if idxs != i:   
-                    # Assign a NaN to isentropes of the same value 
-                    isentrope_dist[idxs] = np.nan
-                    # If there is a 0, that is the overturning isentrope in question                 
-            # Identify instances where overturning isentropes occur within 15 degrees of each other
+                # Assign a NaN to isentropes of the same value 
+                        isentrope_dist[idxs] = np.nan
+        # If there is a 0, that is the overturning isentrope in question                 
+        # Identify instances where overturning isentropes occur within 15 degrees of each other
             possible_overturning_region_idx = np.argwhere(np.logical_and(isentrope_dist < wavebreak_thres, isentrope_dist != 0)).squeeze()
             # Add in the index of the isentrope that is being examined for overturning
             possible_overturning_region_idx = np.sort(np.append(possible_overturning_region_idx,i))
             isentrope_dist_all.append(isentrope_dist)
-            if np.sum(np.logical_and(isentrope_dist < wavebreak_thres, isentrope_dist != 0)).squeeze() >= num_of_overturning:
-                # Identify the north, south, west, and east edges of the overturning region
-                overturning_region_bounds = event_bounds_mid[possible_overturning_region_idx].squeeze()
-                north_bound = np.max(overturning_region_bounds[:,0])
-                south_bound = np.min(overturning_region_bounds[:,1])
-                west_bound = np.min(overturning_region_bounds[:,2])
-                east_bound = np.max(overturning_region_bounds[:,3])
-                RWB_event_arr = np.vstack([event_centroids_mid[possible_overturning_region_idx]])
-                matrix_cluster_mean.append([np.mean(RWB_event_arr[:,0]), np.mean(RWB_event_arr[:,1]), np.mean(RWB_event_arr[:,2]),
-                                                    north_bound,south_bound,west_bound,east_bound])  
-                a.append(overturning_region_bounds)     
-                RWB_event.append(event_centroids_mid[possible_overturning_region_idx].squeeze())  
-            isentrope_dist = []
-    # Convert the list into an array for easier usage
-    matrix_cluster_mean = np.stack(matrix_cluster_mean)
-    return matrix_cluster_mean, RWB_event
+            
+            # Cluster isentropes withini the specified distance criteria
+
+            flag = False
+            for i_prior, prior in enumerate(possible_overturning_region_idx_all):
+                overlap = np.intersect1d(possible_overturning_region_idx, prior)
+                # Is there an isentrope that occurs within the distance criteria in multiple locations
+                if len(overlap) > 0:
+                    union = np.union1d(prior,possible_overturning_region_idx)
+                    # Cluster isentropes into same event 
+                    possible_overturning_region_idx_all[i_prior] = union
+                    flag = True
+            if flag == False:
+                possible_overturning_region_idx_all.append(possible_overturning_region_idx)
+   
+    # Now remove any instance where there are not at least the number of user-specified overturnings                
+    for possible_event in possible_overturning_region_idx_all:
+        if len(possible_event) >= num_of_overturning:
+            RWB_event_cent = event_centroids_mid[possible_event]
+            RWB_event.append(RWB_event_cent)
+            
+            # Identify the north, south, west, and east edges of the overturning region
+            overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
+            north_bound = np.max(overturning_region_bounds[:,0])
+            south_bound = np.min(overturning_region_bounds[:,1])
+            west_bound = np.min(overturning_region_bounds[:,2])
+            east_bound = np.max(overturning_region_bounds[:,3])
+            matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
+                                                north_bound,south_bound,west_bound,east_bound])
+    # For no RWBs identified 
+    if len(matrix_cluster_mean) < 1:
+        matrix_cluster_mean_all.append(matrix_cluster_mean)
+    # For RWBs that are identified
+    else:
+        # Convert the list into an array for easier usage
+        matrix_cluster_mean_all.append(np.stack(matrix_cluster_mean))
+ 
+    return matrix_cluster_mean_all, RWB_event
 
