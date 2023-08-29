@@ -25,12 +25,14 @@ Function inputs
 # adjustable threshold for width of wavebreak (degrees longitude)
 '''
 #%% Load data
-path_py = "C:\Graduate School\RWB Stuff\Python Scripts"
+# path_py = "C:\Graduate School\RWB Stuff\Python Scripts"
+path_py = "/Users/gxl5179/Desktop/RWB_WORK/python"
+
 os.chdir(path_py)
-import wavebreakpy as rwb
+import wavebreakpy1 as rwb
 
 data = Dataset("../data/ERA5DTfield_1979reGrid.nc")
-theta_ex = np.array(data.variables['DT_theta'][9])
+theta_ex = np.array(data.variables['DT_theta'][168])
 lat_theta = np.array(data.variables['lat'])
 lon_theta = np.array(data.variables['lon'])
 theta_3_worlds = np.concatenate((theta_ex,theta_ex,theta_ex,theta_ex[:,0].reshape(-1,1)),1)
@@ -48,7 +50,7 @@ lat_dist_thres = 40 # degrees latitude maximum of identified overturning
 lon_width_thres = 5 # degrees longitude minimum of identified overturning
 #%% Calling the contour function and getting the QuadContour output
 plt.figure(dpi = 1000)
-cs = plt.contour(lat_ext[:,1:],lon_ext[:,1:],theta_3_worlds[:,1:],[theta_levels[10]])
+cs = plt.contour(lat_ext[:,1:],lon_ext[:,1:],theta_3_worlds[:,1:],[theta_levels[7]])
 contour_coord = cs.allsegs[0]
 # plt.close()
 # The step below will combine all the polygons vertices into one array (identical to the C_round in MATLAB)
@@ -161,6 +163,8 @@ if len(c_round_cont) > 0:
 #     having indentified contours as arrays in a list was the easiest way to store information
 #     about wave breaking using this function.     
 # =============================================================================
+    if c_ext_round[0,-1] == 1:
+        c_ext_round[0,-1] = 0
     # Make a list of array(s) of identified overturning contours at a given theta level
     id_cont = np.diff(c_ext_round[:,-1])
     # This is very similar/identical to scounter_ext_C and ecounter_ext_C in WaveBreak.m
@@ -173,6 +177,7 @@ if len(c_round_cont) > 0:
         scounter = int(scounter)
         ecounter = int(ecounter_ext_c[id_cont_counter])
         c_ext_round_list.append(c_ext_round[scounter+1:ecounter+1,:2])
+    
    # Create arrays for LC1 and LC2 events
     LC1 = []
     LC1_centroids = []
