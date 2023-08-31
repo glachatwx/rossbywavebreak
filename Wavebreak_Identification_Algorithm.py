@@ -20,6 +20,7 @@ data = Dataset("../data/ERA5DTfield_1979reGrid.nc")
 lat_theta = np.array(data.variables['lat'])
 lon_theta = np.array(data.variables['lon'])
 theta_ex = np.array(data.variables['DT_theta'])
+utc_date = np.array(data.variables['utc_date'])
 t, y, x = np.shape(theta_ex)
 lon_3_worlds = np.arange(0,1081.25,1.25)
 theta_levels = np.arange(280,371,5)
@@ -42,10 +43,11 @@ LC1_all = []
 LC2_all = []
 LC1_bounds_all= []
 LC2_bounds_all = []
-matrix_cluster_mean_all = []
+matrix_LC1_cluster_mean_all = []
+matrix_LC2_cluster_mean_all = []
 RWB_event_all = []
-for time_step in np.arange(0,10):
-        print(time_step)
+for time_step in np.arange(1,2):
+        utc_date_step = utc_date[time_step]
         theta_3_worlds = np.concatenate((theta_ex[time_step],theta_ex[time_step],theta_ex[time_step],theta_ex[time_step,:,0].reshape(-1,1)),1)
         theta_3_worlds = np.swapaxes(theta_3_worlds,0,1)
         for isentrope in theta_levels:
@@ -63,12 +65,47 @@ for time_step in np.arange(0,10):
             LC1_bounds_all.append(LC1_bounds)
             LC2_bounds_all.append(LC2_bounds)
             
-        matrix_cluster_mean, RWB_event = rwb.RWB_events(LC2_centroids_all,LC2_bounds_all,theta_levels,
-                                                        wavebreak_thres, num_of_overturning)
-        matrix_cluster_mean_all.append(matrix_cluster_mean)
-        RWB_event_all.append(RWB_event)
+        matrix_LC1_cluster_mean, RWB_event = rwb.RWB_events(LC1_centroids_all,LC1_bounds_all,theta_levels,
+                                                        wavebreak_thres, num_of_overturning, utc_date_step)
+        matrix_LC2_cluster_mean, RWB_event = rwb.RWB_events(LC2_centroids_all,LC2_bounds_all,theta_levels,
+                                                        wavebreak_thres, num_of_overturning, utc_date_step)
+        # For time steps without any events, do not append a blank array
+        if len(matrix_LC1_cluster_mean) >= 1:     
+            # Make sure to add the time step of the identified wave break   
+            matrix_LC1_cluster_mean_all.append(matrix_LC1_cluster_mean)
+            # RWB_event_all.append(RWB_event)
+        if  len(matrix_LC2_cluster_mean) >= 1:
+            # Make sure to add the time step of the identified wave break   
+            matrix_LC2_cluster_mean_all.append(matrix_LC2_cluster_mean)
+            # RWB_event_all.append(RWB_event)
         # Clear out the lists for each time step 
         LC1_centroids_all = []
         LC2_centroids_all = []
         LC1_bounds_all = []
         LC2_bounds_all = []
+# Create two variables from the user functions to save to a netCDF file
+matrix_LC1_cluster_mean_arr = np.vstack(matrix_LC1_cluster_mean_all)
+matrix_LC2_cluster_mean_arr = np.vstack(matrix_LC2_cluster_mean_all)        
+#%% Eliminate wave breaks that exceed a certain thermodynamic threshold set by the user
+        
+#%% Create a nc file with Rossby Wave Break identification
+# f_create = "/Users/gxl5179/Desktop/RWB_WORK/data/RWB_theta_"+str(yrs[0])+'_'+str(yrs[-1])+'_'+rwb_type+season+"TEST.nc"
+event,i = np.shape(matrix_LC1_cluster_mean_arr) 
+f_create = "C:/Graduate School/RWB Stuff/data/WB_climo.1980.nc"
+# This creates the .nc file 
+try: ds.close()  # just to be safe, make sure dataset is not already open.
+except: pass
+ds = Dataset(f_create, 'w', format = 'NETCDF4')
+ds.title  = 'Rossby Wave Breaking Event Information'
+
+event_dim = ds.createDimension('time', None) # None allows the dimension to be unlimited
+info_dim = ds.createDimension('info', i)  # This is to create the same amount of columns as in the array
+# Create the variable for the array
+matrix_LC1_cluster_mean_var = ds.createVariable('matrix_LC1_cluster_mean',np.float64,('time', 'info'))
+matrix_LC2_cluster_mean_var = ds.createVariable('matrix_LC2_cluster_mean',np.float64,('time', 'info'))
+
+matrix_LC1_cluster_mean_var[:,:] = np.double(matrix_LC1_cluster_mean_arr)
+matrix_LC2_cluster_mean_var[:,:] = np.double(matrix_LC2_cluster_mean_arr)
+
+# Make sure to close file once it is finished writing!
+ds.close()

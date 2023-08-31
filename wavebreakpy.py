@@ -1403,6 +1403,8 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
     #     having indentified contours as arrays in a list was the easiest way to store information
     #     about wave breaking using this function.     
     # =============================================================================
+        if c_ext_round[0,-1] == 1:
+            c_ext_round[0,-1] = 0
         # Make a list of array(s) of identified overturning contours at a given theta level
         id_cont = np.diff(c_ext_round[:,-1])
         # This is very similar/identical to scounter_ext_C and ecounter_ext_C in WaveBreak.m
@@ -1498,7 +1500,8 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
     
     return c_round_cont_spur, LC1, LC2, LC1_centroids, LC2_centroids, LC1_bounds, LC2_bounds
 #%% Function to identify overturning contours into regions that are wave breaking event
-def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, num_of_overturning):
+def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, num_of_overturning, utc_date_step=None):
+   
     # These lists will create the variables of interest for 
     event_centroids_mid = []
     event_bounds_mid = []
@@ -1555,16 +1558,32 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, nu
     for possible_event in possible_overturning_region_idx_all:
         if len(possible_event) >= num_of_overturning:
             RWB_event_cent = event_centroids_mid[possible_event]
+            overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
             RWB_event.append(RWB_event_cent)
             
+            # Fix the "three-worlds" bug that appears near the prime meridian
+            
+            RWB_event_lon_centroids = RWB_event_cent[:,1]
+            RWB_event_lon_cent_range = np.max(RWB_event_lon_centroids) - np.min(RWB_event_cent)
+            
+            if RWB_event_lon_cent_range > 180:
+                RWB_lon_cen_pM_idx = np.argwhere(RWB_event_lon_centroids>=540)
+                # Subtract 360 to account for the issue at the prime meridian 
+                RWB_event_cent[RWB_lon_cen_pM_idx,1] -= 360
+                # Subtract 360 from same indices in overturning bounds array
+                overturning_region_bounds[RWB_lon_cen_pM_idx,2:] -= 360
             # Identify the north, south, west, and east edges of the overturning region
-            overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
             north_bound = np.max(overturning_region_bounds[:,0])
             south_bound = np.min(overturning_region_bounds[:,1])
             west_bound = np.min(overturning_region_bounds[:,2])
             east_bound = np.max(overturning_region_bounds[:,3])
-            matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
-                                                north_bound,south_bound,west_bound,east_bound])
+            # Build in independence from utc_date_step
+            if utc_date_step == None:
+                matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
+                                                 north_bound,south_bound,west_bound,east_bound])
+            else:   
+                matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
+                                            north_bound,south_bound,west_bound,east_bound, utc_date_step])
     # For no RWBs identified 
     if len(matrix_cluster_mean) < 1:
         matrix_cluster_mean_all.append(matrix_cluster_mean)
@@ -1573,5 +1592,5 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, nu
         # Convert the list into an array for easier usage
         matrix_cluster_mean_all.append(np.stack(matrix_cluster_mean))
  
-    return matrix_cluster_mean_all, RWB_event
+    return np.array(matrix_cluster_mean_all).squeeze(), RWB_event
 

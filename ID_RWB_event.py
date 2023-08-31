@@ -39,7 +39,7 @@ LC2_bounds_all = []
 LC1_centroids_all = []
 LC2_centroids_all = []
 matrix_cluster_mean_all = []  
-for time_step in np.arange(0,10):
+for time_step in np.arange(1,2):
         print(time_step)
         theta_3_worlds = np.concatenate((theta_ex[time_step],theta_ex[time_step],theta_ex[time_step],theta_ex[time_step,:,0].reshape(-1,1)),1)
         theta_3_worlds = np.swapaxes(theta_3_worlds,0,1)
@@ -68,13 +68,13 @@ for time_step in np.arange(0,10):
         matrix_cluster_mean = []
         isentrope_dist_all = []
         possible_overturning_region_idx_all = []
-        for isentrope_c, centroids in enumerate(LC2_centroids_all):
+        for isentrope_c, centroids in enumerate(LC1_centroids_all):
             # Only analyze isentropes that have been found to be overturning
             if len(centroids) > 0:
                 for cen_idx,lat_lons in enumerate(centroids):
                     if np.logical_and(lat_lons[1] >=360, lat_lons[1] <720):
                         event_centroids_mid.append([lat_lons[0],lat_lons[1],theta_levels[isentrope_c]])  
-                        event_bounds_mid.append(LC2_bounds_all[isentrope_c][cen_idx])
+                        event_bounds_mid.append(LC1_bounds_all[isentrope_c][cen_idx])
         event_centroids_mid = np.stack(event_centroids_mid)
         event_bounds_mid = np.stack(event_bounds_mid)
         # Calculate the Haversine distance between identified overturning contours
@@ -115,10 +115,21 @@ for time_step in np.arange(0,10):
         for possible_event in possible_overturning_region_idx_all:
             if len(possible_event) >= num_of_overturning:
                 RWB_event_cent = event_centroids_mid[possible_event]
+                overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
                 RWB_event.append(RWB_event_cent)
                 
+                # Fix the "three-worlds" bug that appears near the prime meridian
+                
+                RWB_event_lon_centroids = RWB_event_cent[:,1]
+                RWB_event_lon_cent_range = np.max(RWB_event_lon_centroids) - np.min(RWB_event_cent)
+                
+                if RWB_event_lon_cent_range > 180:
+                    RWB_lon_cen_pM_idx = np.argwhere(RWB_event_lon_centroids>=540)
+                    # Subtract 360 to account for the issue at the prime meridian 
+                    RWB_event_cent[RWB_lon_cen_pM_idx,1] -= 360
+                    # Subtract 360 from same indices in overturning bounds array
+                    overturning_region_bounds[RWB_lon_cen_pM_idx,2:] -= 360
                 # Identify the north, south, west, and east edges of the overturning region
-                overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
                 north_bound = np.max(overturning_region_bounds[:,0])
                 south_bound = np.min(overturning_region_bounds[:,1])
                 west_bound = np.min(overturning_region_bounds[:,2])
