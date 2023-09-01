@@ -1497,10 +1497,11 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
         LC2_centroids = []
         LC1_bounds = []
         LC2_bounds = []
+        c_ext_round_arr = []
     
-    return c_round_cont_spur, LC1, LC2, LC1_centroids, LC2_centroids, LC1_bounds, LC2_bounds
+    return c_round_cont_spur,LC1, LC2, LC1_centroids, LC2_centroids, LC1_bounds, LC2_bounds
 #%% Function to identify overturning contours into regions that are wave breaking event
-def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, num_of_overturning, utc_date_step=None):
+def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, RWB_width_thres, num_of_overturning, utc_date_step=None):
    
     # These lists will create the variables of interest for 
     event_centroids_mid = []
@@ -1559,7 +1560,6 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, nu
         if len(possible_event) >= num_of_overturning:
             RWB_event_cent = event_centroids_mid[possible_event]
             overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
-            RWB_event.append(RWB_event_cent)
             
             # Fix the "three-worlds" bug that appears near the prime meridian
             
@@ -1577,13 +1577,20 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, nu
             south_bound = np.min(overturning_region_bounds[:,1])
             west_bound = np.min(overturning_region_bounds[:,2])
             east_bound = np.max(overturning_region_bounds[:,3])
-            # Build in independence from utc_date_step
-            if utc_date_step == None:
-                matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
-                                                 north_bound,south_bound,west_bound,east_bound])
-            else:   
-                matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
-                                            north_bound,south_bound,west_bound,east_bound, utc_date_step])
+            # Ensure that overturning region does not exceed 60 degrees longitude width
+            if east_bound - west_bound > RWB_width_thres:
+                # Pass through iteration in loop without appending to matrix
+                continue
+            
+            else:
+                RWB_event.append(RWB_event_cent)
+                # Build in independence from utc_date_step
+                if utc_date_step == None:
+                    matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
+                                                     north_bound,south_bound,west_bound,east_bound])
+                else:   
+                    matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), np.mean(RWB_event_cent[:,1]), np.mean(RWB_event_cent[:,2]),
+                                                north_bound,south_bound,west_bound,east_bound, utc_date_step])
     # For no RWBs identified 
     if len(matrix_cluster_mean) < 1:
         matrix_cluster_mean_all.append(matrix_cluster_mean)

@@ -32,6 +32,7 @@ num_of_crossings = 3 # How many times must a contour cross a meridian to be iden
 haversine_dist_thres = 1500 # distance in km
 lat_dist_thres = 40 # degrees latitude maximum of identified overturning
 lon_width_thres = 5 # degrees longitude minimum of identified 
+RWB_width_thres = 60 # degrees longitude maximum of identified wave break domain (west bound to east bound)
 wavebreak_thres = 15 # degrees great circle distance between overturning contours
 num_of_overturning = 3 # the amount of isentropes required to be within x degrees great circle distance in region of overturning
 
@@ -46,7 +47,7 @@ LC2_bounds_all = []
 matrix_LC1_cluster_mean_all = []
 matrix_LC2_cluster_mean_all = []
 RWB_event_all = []
-for time_step in np.arange(1,2):
+for time_step in np.arange(0,359):
         utc_date_step = utc_date[time_step]
         theta_3_worlds = np.concatenate((theta_ex[time_step],theta_ex[time_step],theta_ex[time_step],theta_ex[time_step,:,0].reshape(-1,1)),1)
         theta_3_worlds = np.swapaxes(theta_3_worlds,0,1)
@@ -66,9 +67,9 @@ for time_step in np.arange(1,2):
             LC2_bounds_all.append(LC2_bounds)
             
         matrix_LC1_cluster_mean, RWB_event = rwb.RWB_events(LC1_centroids_all,LC1_bounds_all,theta_levels,
-                                                        wavebreak_thres, num_of_overturning, utc_date_step)
+                                                        wavebreak_thres, RWB_width_thres, num_of_overturning, utc_date_step)
         matrix_LC2_cluster_mean, RWB_event = rwb.RWB_events(LC2_centroids_all,LC2_bounds_all,theta_levels,
-                                                        wavebreak_thres, num_of_overturning, utc_date_step)
+                                                        wavebreak_thres, RWB_width_thres, num_of_overturning, utc_date_step)
         # For time steps without any events, do not append a blank array
         if len(matrix_LC1_cluster_mean) >= 1:     
             # Make sure to add the time step of the identified wave break   
