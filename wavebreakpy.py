@@ -1366,7 +1366,7 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
                             end_point1 = inds
                     elif np.logical_and(~np.isnan(end_point1), np.logical_and(current_lon==prior_lon,current_lon != next_lon)):
                             end_point2 = inds
-                            counted.append(np.mean((end_point1,end_point2)).astype(int))
+                            counted.append(np.ceil(np.mean((end_point1,end_point2))).astype(int))
                             # Reset index for next iteration through the loop 
                             end_point1 = np.nan
                             end_point2 = np.nan 
@@ -1404,7 +1404,8 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
     #     about wave breaking using this function.     
     # =============================================================================
         if c_ext_round[0,-1] == 1:
-            c_ext_round[0,-1] = 0
+            # Must start it at -1 to account for the +1 in line 1420 below
+            c_ext_round[0,-1] = -1
         # Make a list of array(s) of identified overturning contours at a given theta level
         id_cont = np.diff(c_ext_round[:,-1])
         # This is very similar/identical to scounter_ext_C and ecounter_ext_C in WaveBreak.m
@@ -1416,7 +1417,11 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
         for id_cont_counter, scounter in enumerate(scounter_ext_c):
             scounter = int(scounter)
             ecounter = int(ecounter_ext_c[id_cont_counter])
-            c_ext_round_list.append(c_ext_round[scounter+1:ecounter+1,:2])
+            # Must add 2 to ecounter to account for Python not stopping at end index
+            if ecounter + 2 >= len(c_ext_round):
+                c_ext_round_list.append(c_ext_round[scounter+1:,:2])
+            else:
+                c_ext_round_list.append(c_ext_round[scounter+1:ecounter+1,:2])
         # Create arrays for LC1 and LC2 events
         LC1 = []
         LC1_centroids = []
