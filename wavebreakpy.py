@@ -1611,7 +1611,6 @@ def RWB_events2(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, R
 def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, RWB_width_thres, num_of_overturning, utc_date_step=None):
 # Limit the dataset to only include overturning contours from the middle domain (360 to 720) 
 # and determine the haversine distance between isentropic levels
-    
     # These lists will create the variables of interest for 
     event_centroids_mid = []
     event_bounds_mid = []
@@ -1621,7 +1620,7 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, RW
     matrix_cluster_mean_all = []
     isentrope_dist_all = []
     possible_overturning_region_idx_all = []
-
+    idx_of_farther_isentrope_RWB = []
     for isentrope_c, centroids in enumerate(LC_centroids_all):
         # Only analyze isentropes that have been found to be overturning
         if len(centroids) > 0:
@@ -1677,26 +1676,31 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, RW
             overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
             # Find if there are any overturning isentropes of the same value
             isent_RWB = RWB_event_cent[:,-1]
-            lat_cent_RWB = RWB_event_cent[:,0]
             theta_range = np.arange(np.min(isent_RWB),np.max(isent_RWB)+1,5)
             for theta_counter, th_vals in enumerate(theta_range):
                 #  If there are two isentropes of the same value in the possible overturning region
                if np.sum(th_vals == RWB_event_cent[:,-1]) > 1:
-                    event_cent_idx = np.argwhere(th_vals == RWB_event_cent[:,-1])
+                    event_cent_idx = np.argwhere(th_vals == isent_RWB)
                     evt_cent_mid_idx = np.argwhere(event_centroids_mid[:,0] == RWB_event_cent[event_cent_idx,0])
-                    prior_ovt_cont = np.argwhere(theta_range[theta_counter-1] == RWB_event_cent[:,-1])
-                    prior_lat_idx = np.argwhere(event_centroids_mid[:,0] == RWB_event_cent[prior_ovt_cont,0])
-                    # Only take the shortest distance between isentropes (instead of both less than wavebreak_thres)
-                    shortest = np.argmax(isentrope_dist_all[prior_lat_idx[:,-1],evt_cent_mid_idx[:,-1]])
-                    idx_of_farther_isentrope = evt_cent_mid_idx[shortest,-1]
-                    lat_of_farthest_isentrope = event_centroids_mid[idx_of_farther_isentrope,0]
-                    lon_of_farthest_isentrope = event_centroids_mid[idx_of_farther_isentrope,1]
-                    idx_of_farther_isentrope_RWB = np.argwhere(np.logical_and(RWB_event_cent[:,0] == lat_of_farthest_isentrope, RWB_event_cent[:,1] == lon_of_farthest_isentrope))
-                    # Remove the isentrope of the same value from the RWB event
-                    RWB_event_cent = np.delete(RWB_event_cent,idx_of_farther_isentrope_RWB, axis = 0)
-                    overturning_region_bounds = np.delete(overturning_region_bounds,idx_of_farther_isentrope_RWB, axis = 0)
+                    # If the repeated contour occurs as the last two overturning contours in the event, special indexing must occur to find the prior lat
+                    if np.logical_and(th_vals == np.max(isent_RWB), isent_RWB[-1] == isent_RWB[-2]):
+                        prior_ovt_cont = np.argwhere(theta_range[theta_counter] == isent_RWB)
+                    else:
+                        prior_ovt_cont = np.argwhere(theta_range[theta_counter-1] == isent_RWB)
+                    # This if statement is used for when an isentrope may not occur 5 K after the preceding one (e.g., 310 K,320 K,330 K are the overturning contours in question)
+                    if prior_ovt_cont.size > 0:
+                        prior_lat_idx = np.argwhere(event_centroids_mid[:,0] == RWB_event_cent[prior_ovt_cont,0])
+                        # Only take the shortest distance between isentropes (instead of both less than wavebreak_thres)
+                        shortest = np.argmax(isentrope_dist_all[prior_lat_idx[:,-1],evt_cent_mid_idx[:,-1]])
+                        idx_of_farther_isentrope = evt_cent_mid_idx[shortest,-1]
+                        lat_of_farthest_isentrope = event_centroids_mid[idx_of_farther_isentrope,0]
+                        lon_of_farthest_isentrope = event_centroids_mid[idx_of_farther_isentrope,1]
+                        idx_of_farther_isentrope_RWB.append(np.argwhere(np.logical_and(RWB_event_cent[:,0] == lat_of_farthest_isentrope, RWB_event_cent[:,1] == lon_of_farthest_isentrope)))
+            # Remove the isentrope of the same value from the RWB event
+            RWB_event_cent = np.delete(RWB_event_cent,idx_of_farther_isentrope_RWB, axis = 0)
+            overturning_region_bounds = np.delete(overturning_region_bounds,idx_of_farther_isentrope_RWB, axis = 0)
             # Fix the "three-worlds" bug that appears near the prime meridian
-            
+        
             RWB_event_lon_centroids = RWB_event_cent[:,1]
             RWB_event_lon_cent_range = np.max(RWB_event_lon_centroids) - np.min(RWB_event_cent)
             
