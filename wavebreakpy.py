@@ -1620,7 +1620,6 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, RW
     matrix_cluster_mean_all = []
     isentrope_dist_all = []
     possible_overturning_region_idx_all = []
-    idx_of_farther_isentrope_RWB = []
     for isentrope_c, centroids in enumerate(LC_centroids_all):
         # Only analyze isentropes that have been found to be overturning
         if len(centroids) > 0:
@@ -1669,9 +1668,9 @@ def RWB_events(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, RW
     
     # Now remove any instance where there are not at least the number of user-specified overturnings             
     for possible_event in possible_overturning_region_idx_all:
-       
+        idx_of_farther_isentrope_RWB = []
+
         if len(possible_event) >= num_of_overturning:
-            
             RWB_event_cent = event_centroids_mid[possible_event]
             overturning_region_bounds = event_bounds_mid[possible_event].squeeze()
             # Find if there are any overturning isentropes of the same value
