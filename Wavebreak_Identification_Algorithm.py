@@ -21,14 +21,18 @@ years = np.arange(2023,2023+1)
 
 lon_3_worlds         = np.arange(0,1081.25,1.25)
 theta_levels         = np.arange(270,370+1,5)
+hemisphere           = 'SH'
+
+# ----------- Variables for changing the identification of overturning contours ------------
 num_of_crossings     = 3 # How many times must a contour cross a meridian to be identified as overturning?
-haversine_dist_thres = 1500 # distance in km
-lat_dist_thres       = 40 # degrees latitude maximum of identified overturning
+haversine_dist_thres = 1500 # distance in km - The minimum distance an overturning region must be for a contour to be counted
+lon_width_thres      = 5 # degrees longitude minimum of identified overturning region of contour
+lat_dist_thres       = 40 # degrees latitude maximum of identified overturning - the start and end of a contour should not exceed this value
+
+# ----------- Variables for changing the identification of Rossby wave breaking events --------
 RWB_width_thres      = 60 # degrees longitude maximum of identified wave break domain (west bound to east bound)
-lon_width_thres      = 5 # degrees longitude minimum of identified 
 wavebreak_thres      = 15 # degrees great circle distance between overturning contours
 num_of_overturning   = 3 # the amount of isentropes required to be within x degrees great circle distance in region of overturning
-hemisphere           = 'SH'
 
 for yr in years:
     # The file name being created
