@@ -62,6 +62,13 @@ def calcPV(temperature,uwind,vwind,p_arr,lon,lat,interpolation_value,bottom_or_t
     P_arr  = rwb.p2nd(p_arr,temperature,3)
     dx, dy = mpcalc.lat_lon_grid_deltas(lon,lat)
     lat_PV = lat*units.Quantity('degrees')
+     # Ensure sign is correct for interpolation value (PVU)
+    if lat_select == 'NH':
+            if interp_val <= 0:
+                interp_value = -interp_val
+    elif lat_select == 'SH':
+            if interp_val >= 0:
+                interp_value = -interp_val
     # Insert a blank axis to make deltas appear as 3D for derivatives to work in MetPy function
     dx     = dx[None, :, :]
     dy     = dy[None, :, :] 
