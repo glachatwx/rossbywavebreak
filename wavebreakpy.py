@@ -1797,226 +1797,239 @@ def WaveBreak(theta_3_worlds,lon_3_worlds,theta_level,lat_ext,lon_ext,latlonmesh
     cs = plt.contour(lat_ext[:,1:],lon_ext[:,1:],theta_3_worlds[:,1:],[theta_level])
     contour_coord = cs.allsegs[0]
     plt.close()
-    # The step below will combine all the polygons vertices into one array (identical to the C_round in MATLAB)
-    # Nearest neighbor search for contour vertices on a lat, lon grid
-    nbrs = NearestNeighbors(n_neighbors=1, algorithm='ball_tree', metric = 'euclidean').fit(latlonmesh)
-    c_round = []
-    for contour_crd in contour_coord:
-        ind = nbrs.kneighbors(contour_crd,return_distance = False)
-        c_round.append(latlonmesh[ind].squeeze())
-    # Ensure that the contour extends around the entire hemisphere (no cutoffs)
-    c_round_cont = []
-    for c_round_c in c_round:
-        # The if statement is used to determine if the contour starts at 0 and ends at 1080 (extends across world)
-        if np.logical_and(c_round_c[0,1] == 0,c_round_c[-1,-1] >= 1080):
-            c_round_cont.append(c_round_c)
-    if len(c_round_cont) > 0:
-        # Step 1: Find the distance (km) between each point of a contour that 
-        # extends across the world: domain of three worlds 
-        dist_C_ext = []
-        for cntr in c_round_cont:
-            for idx,cntr_pts in enumerate(cntr):
-                # Special condition for the last point to find the distance between the start and end point 
-                # of the contour 
-                if idx == len(cntr)-1:
-                    dist_C_ext.append(haversine(cntr[0][1], cntr[0][0], cntr[-1][1], cntr[-1][0], 'km'))
-                else:
-                    dist_C_ext.append(haversine(cntr_pts[1], cntr_pts[0], cntr[idx+1][1], cntr[idx+1][0], 'km'))
-        # Convert to array for simplicity with indexing in the step below
-        dist_C_ext = np.array(dist_C_ext)
-        # Find the points along the contour line have no distance between them 
-        # (i.e., at the same lat/lon as the prior vertex) and remove them for next step
-        c_round_cont_spur = np.vstack(c_round_cont).squeeze() # This was changed from np.array(c_round_cont).squeeze() - would not break on             index 299 contour level 305 in 1980
-        # c_round_cont_spur = np.array(c_round_cont).squeeze()
-        c_round_cont = c_round_cont_spur[np.argwhere(dist_C_ext!=0),:].squeeze()
-        # dist_C_ext = dist_C_ext[dist_C_ext != 0].squeeze()
-        # Step 2: Seek out all regions where we have three endpoints along a single waveguide 
-        # which intesect one meridian
-    # =============================================================================
-    #     This search identifies: [1]: Looks for at least 3 crossings 
-    #                             [2]: Removes spurious points from neighboring points falling along same meridian
-    #                                 This is necessary as the 3 crossings identification has been tripped up by
-    #                                 spurious points along the same meridian
-    # =============================================================================
-        # This is a very MATLAB-esque way of approaching the issue but could not replicate using Pythonic logic
-        shpe = np.shape(c_round_cont)
-        c_ext_round = np.empty((shpe))
-        c_ext_round[:] = c_round_cont
-        zros = np.zeros((shpe))
-        c_ext_round = np.hstack((c_ext_round,zros))
-        # This is identical to c_ext_round_cont in WaveBreak.m
-        c_ext_round = c_ext_round[:,:3]
-        # Looks from east to west starting at the highest value and incrementing in the same step as the longitude resolution
-        for lons in np.flip(lon_3_worlds):
-            lon_ind = np.argwhere(c_round_cont[:,1] == lons)
-            counted = []
-            # Does the indentified continously extending contour cross any meridian at least 3 times?
-            if len(lon_ind) >= num_of_crossings:
-                # Find the index of the longitudes in the c_round_c array
-                for inds in lon_ind:
-                    # Ensure that a crossing does not occur at neighboring points (indices)
-                    # Convert from array to integer for indexing purposes
-                    inds = int(inds)
-                    # Allow for the edges to be captured (i.e., 1080 can throw an IndexError)
-                    if np.logical_and(lons == 1080, inds == len(c_round_cont) - 1):
-                        inds = -1
-                    prior_lon = c_round_cont[inds-1][1]
-                    current_lon = c_round_cont[inds][1]
-                    next_lon = c_round_cont[inds+1][1]
-                    # Find the starting point of the overturning contour
-                    if np.logical_and(prior_lon!=current_lon,current_lon!=next_lon):
-                        counted.append(inds)
-                    # Find the end point   
-                    elif np.logical_and(prior_lon!=current_lon, current_lon == next_lon):
-                            end_point1 = inds
-                    elif np.logical_and(~np.isnan(end_point1), np.logical_and(current_lon==prior_lon,current_lon != next_lon)):
-                            end_point2 = inds
-                            counted.append(np.ceil(np.mean((end_point1,end_point2))).astype(int))
-                            # Reset index for next iteration through the loop 
-                            end_point1 = np.nan
-                            end_point2 = np.nan 
-    
-                if len(counted) >= 3:
-                    for i, lon_idx in enumerate(counted):
-                        if i == len(counted)-2:
-                            break
-                        else:
-                            indxr = counted[i:i+3]
-                            lat_dist = np.max(c_round_cont[indxr,0]) - np.min(c_round_cont[indxr,0])
-                            haversine_dist = np.sum(dist_C_ext[counted[i]:counted[i+2]+1])
-                        # Determine if these overturning points are greater than a user-defined haversine distance minimum 
-                        # but no greater than a user-defined latitude span
-                        if np.logical_and(haversine_dist>=haversine_dist_thres,lat_dist<=lat_dist_thres):
-                            # c_ext_round.append(c_round_cont[counted[i]:counted[i+2] + 1])  
-                            c_ext_round[counted[i]:counted[i+2]+1,-1] = 1 
-        # Step 3: Ensure that the longitudinal extent of the WB is at least 5 degrees
+    # If an isentropic level has no contour, do not proceed through function
+    if len(contour_coord) > 1:    
+        # The step below will combine all the polygons vertices into one array (identical to the C_round in MATLAB)
+        # Nearest neighbor search for contour vertices on a lat, lon grid
+        nbrs = NearestNeighbors(n_neighbors=1, algorithm='ball_tree', metric = 'euclidean').fit(latlonmesh)
+        c_round = []
+        for contour_crd in contour_coord:
+            ind = nbrs.kneighbors(contour_crd,return_distance = False)
+            c_round.append(latlonmesh[ind].squeeze())
+        # Ensure that the contour extends around the entire hemisphere (no cutoffs)
+        c_round_cont = []
+        for c_round_c in c_round:
+            # The if statement is used to determine if the contour starts at 0 and ends at 1080 (extends across world)
+            if np.logical_and(c_round_c[0,1] == 0,c_round_c[-1,-1] >= 1080):
+                c_round_cont.append(c_round_c)
+        if len(c_round_cont) > 0:
+            # Step 1: Find the distance (km) between each point of a contour that 
+            # extends across the world: domain of three worlds 
+            dist_C_ext = []
+            for cntr in c_round_cont:
+                for idx,cntr_pts in enumerate(cntr):
+                    # Special condition for the last point to find the distance between the start and end point 
+                    # of the contour 
+                    if idx == len(cntr)-1:
+                        dist_C_ext.append(haversine(cntr[0][1], cntr[0][0], cntr[-1][1], cntr[-1][0], 'km'))
+                    else:
+                        dist_C_ext.append(haversine(cntr_pts[1], cntr_pts[0], cntr[idx+1][1], cntr[idx+1][0], 'km'))
+            # Convert to array for simplicity with indexing in the step below
+            dist_C_ext = np.array(dist_C_ext)
+            # Find the points along the contour line have no distance between them 
+            # (i.e., at the same lat/lon as the prior vertex) and remove them for next step
+            c_round_cont_spur = np.vstack(c_round_cont).squeeze() # This was changed from np.array(c_round_cont).squeeze() - would not break on             index 299 contour level 305 in 1980
+            # c_round_cont_spur = np.array(c_round_cont).squeeze()
+            c_round_cont = c_round_cont_spur[np.argwhere(dist_C_ext!=0),:].squeeze()
+            # dist_C_ext = dist_C_ext[dist_C_ext != 0].squeeze()
+            # Step 2: Seek out all regions where we have three endpoints along a single waveguide 
+            # which intesect one meridian
+        # =============================================================================
+        #     This search identifies: [1]: Looks for at least 3 crossings 
+        #                             [2]: Removes spurious points from neighboring points falling along same meridian
+        #                                 This is necessary as the 3 crossings identification has been tripped up by
+        #                                 spurious points along the same meridian
+        # =============================================================================
+            # This is a very MATLAB-esque way of approaching the issue but could not replicate using Pythonic logic
+            shpe = np.shape(c_round_cont)
+            c_ext_round = np.empty((shpe))
+            c_ext_round[:] = c_round_cont
+            zros = np.zeros((shpe))
+            c_ext_round = np.hstack((c_ext_round,zros))
+            # This is identical to c_ext_round_cont in WaveBreak.m
+            c_ext_round = c_ext_round[:,:3]
+            # Looks from east to west starting at the highest value and incrementing in the same step as the longitude resolution
+            for lons in np.flip(lon_3_worlds):
+                lon_ind = np.argwhere(c_round_cont[:,1] == lons)
+                counted = []
+                # Does the indentified continously extending contour cross any meridian at least 3 times?
+                if len(lon_ind) >= num_of_crossings:
+                    # Find the index of the longitudes in the c_round_c array
+                    for inds in lon_ind:
+                        # Ensure that a crossing does not occur at neighboring points (indices)
+                        # Convert from array to integer for indexing purposes
+                        inds = int(inds)
+                        # Allow for the edges to be captured (i.e., 1080 can throw an IndexError)
+                        if np.logical_and(lons == 1080, inds == len(c_round_cont) - 1):
+                            inds = -1
+                        prior_lon = c_round_cont[inds-1][1]
+                        current_lon = c_round_cont[inds][1]
+                        next_lon = c_round_cont[inds+1][1]
+                        # Find the starting point of the overturning contour
+                        if np.logical_and(prior_lon!=current_lon,current_lon!=next_lon):
+                            counted.append(inds)
+                        # Find the end point   
+                        elif np.logical_and(prior_lon!=current_lon, current_lon == next_lon):
+                                end_point1 = inds
+                        elif np.logical_and(~np.isnan(end_point1), np.logical_and(current_lon==prior_lon,current_lon != next_lon)):
+                                end_point2 = inds
+                                counted.append(np.ceil(np.mean((end_point1,end_point2))).astype(int))
+                                # Reset index for next iteration through the loop 
+                                end_point1 = np.nan
+                                end_point2 = np.nan 
         
-    # =============================================================================
-    #     
-    #     Ensure that the overturning exceeds 5 degrees of longitude (width) and ID the wavebreak type
-    #     
-    #     This is user-adjustable, so if larger or smaller width wave breaks can be identified
-    #     
-    #     Note: MATLAB round and roundn differ from Python's round function 
-    #     
-    #     MATLAB round: The round function rounds away from zero to the nearest integer with larger magnitude
-    #     
-    #     Python round: Numpy rounds to the nearest even value
-    #     
-    #     The below lines of code (id_cont line to the creation of LC1 and LC2 arrays) may appear 
-    #     and are overly-complicated. However, extensive de-bugging and testing revealed that 
-    #     having indentified contours as arrays in a list was the easiest way to store information
-    #     about wave breaking using this function.     
-    # =============================================================================
-        if c_ext_round[0,-1] == 1:
-            # Must start it at -1 to account for the +1 in line below
-            c_ext_round[0,-1] = -1
-        # Make a list of array(s) of identified overturning contours at a given theta level
-        id_cont = np.diff(c_ext_round[:,-1])
-        # This is very similar/identical to scounter_ext_C and ecounter_ext_C in WaveBreak.m
-        id_cont_idx = np.argwhere(id_cont != 0)
-        # Every other index is the start of a identified contour from id_cont_idx
-        scounter_ext_c = id_cont_idx[0::2]
-        ecounter_ext_c = id_cont_idx[1::2]
-        c_ext_round_list = []
-        for id_cont_counter, scounter in enumerate(scounter_ext_c):
-            scounter = int(scounter)
-            ecounter = int(ecounter_ext_c[id_cont_counter])
-            # Must add 2 to ecounter to account for Python not stopping at end index
-            if ecounter + 2 >= len(c_ext_round):
-                c_ext_round_list.append(c_ext_round[scounter+1:,:2])
-            else:
-                c_ext_round_list.append(c_ext_round[scounter+1:ecounter+1,:2])
-        # Create arrays for LC1 and LC2 events
-        LC1 = []
-        LC1_centroids = []
-        LC1_bounds = []
-        # LC1_bounds = np.empty((6,len(c_ext_round)))
-        # LC1_bounds[:] = np.nan
-       # LC1_cnt = []
-        LC2 = []
-        LC2_centroids = []
-        LC2_bounds = []
-        # LC2_bounds = np.empty((6,len(c_ext_round)))
-        # LC2_bounds[:] = np.nan
-        # LC1_event = 0
-        # LC2_event = 0
-        # wb_center = np.empty((2,len(c_ext_round)))
-        # wb_center[:] = np.nan
-        # wb_event = 0
-        for overturning_cont_coords in c_ext_round_list:
-            # Ensure that the beginning of the overturning is west of the end point of overturning - otherwise do not consider contour as overturning
-            # Does this ensure that cutoff-like features will be eliminated?
-            if overturning_cont_coords[0,-1] > overturning_cont_coords[-1,-1]:
-                continue
-            else:
-                # Turn the list into a numpy array to make indexing easier
-                c_ext_round_arr = np.stack(overturning_cont_coords).squeeze()
-                # Identify the farthest west longitude value
-                lon_min_ovrt = np.min(c_ext_round_arr[:,1])
-                # Identify the farthest east longitude value
-                lon_max_ovrt = np.max(c_ext_round_arr[:,1])
-                
-                # Make sure to remove overturning contours not exceeding user-specified longitudinal width
-                if lon_max_ovrt - lon_min_ovrt <= lon_width_thres:
-                    c_ext_round_arr[:] = np.nan
-                else:
-                    # Calculate information about the geographic centroids and bounding region of the overturning contour
-                    mean_lat = np.mean(c_ext_round_arr[:,0])
-                    mean_lon = np.mean(c_ext_round_arr[:,1])
-                    # Farthest north and south latitude values
-                    north_bound = np.max(c_ext_round_arr[:,0])
-                    south_bound = np.min(c_ext_round_arr[:,0])
-                    # Farthest west and east longitude values
-                    west_bound = np.min(c_ext_round_arr[:,1])
-                    east_bound = np.max(c_ext_round_arr[:,1])
-                    # LC1_cnt.append()
-                    
-    # Check orientation of overturning to identify if it is LC1 (AWB) or LC2 (CWB) with functionality for Northern and Southern hemisphere
+                    if len(counted) >= 3:
+                        for i, lon_idx in enumerate(counted):
+                            if i == len(counted)-2:
+                                break
+                            else:
+                                indxr = counted[i:i+3]
+                                lat_dist = np.max(c_round_cont[indxr,0]) - np.min(c_round_cont[indxr,0])
+                                haversine_dist = np.sum(dist_C_ext[counted[i]:counted[i+2]+1])
+                            # Determine if these overturning points are greater than a user-defined haversine distance minimum 
+                            # but no greater than a user-defined latitude span
+                            if np.logical_and(haversine_dist>=haversine_dist_thres,lat_dist<=lat_dist_thres):
+                                # c_ext_round.append(c_round_cont[counted[i]:counted[i+2] + 1])  
+                                c_ext_round[counted[i]:counted[i+2]+1,-1] = 1 
+            # Step 3: Ensure that the longitudinal extent of the WB is at least 5 degrees
             
-                    if c_ext_round_arr[0][0] > c_ext_round_arr[-1][0]: # This would AWB (NH) since the starting latitude of the contour is farther N
-                        if hemisphere == 'NH':  
-                            # Store all of the information about the overturning contour
-                            LC1.append(c_ext_round_arr)
-                            LC1_centroids.append([mean_lat,mean_lon])
-                        # LC1_bounds[0, LC1_event] = mean_lat
-                        # LC1_bounds[1,LC1_event] = mean_lon
-                            LC1_bounds.append([north_bound,south_bound,west_bound,east_bound])
-                        elif hemisphere == 'SH':
-                            LC2.append(c_ext_round_arr)
-                            LC2_centroids.append([mean_lat,mean_lon])
-                        # LC1_bounds[0, LC1_event] = mean_lat
-                        # LC1_bounds[1,LC1_event] = mean_lon
-                            LC2_bounds.append([north_bound,south_bound,west_bound,east_bound])
-                        # LC1_bounds[2,LC1_event] = north_bound
-                        # LC1_bounds[3,LC1_event] = south_bound
-                        # LC1_bounds[4,LC1_event] = east_bound
-                        # LC1_bounds[5,LC1_event] = west_bound
-                        # LC1_event = LC1_event + 1
-                    elif c_ext_round_arr[0][0] < c_ext_round_arr[-1][0]: # This would be CWB (NH) since the starting latitude of the contour is farther S
-                        if hemisphere == 'NH':
-                            # Store all of the information about the overturning contour
-                            LC2.append(c_ext_round_arr)
-                            LC2_centroids.append([mean_lat,mean_lon])
-                            LC2_bounds.append([north_bound,south_bound,west_bound,east_bound])
-                        elif hemisphere == 'SH':
-                            LC1.append(c_ext_round_arr)
-                            LC1_centroids.append([mean_lat,mean_lon])
-                        # LC1_bounds[0, LC1_event] = mean_lat
-                        # LC1_bounds[1,LC1_event] = mean_lon
-                            LC1_bounds.append([north_bound,south_bound,west_bound,east_bound])
-                        # LC2_bounds[0, LC1_event] = mean_lat
-                        # LC2_bounds[1,LC1_event] = mean_lon
-                        # LC2_bounds[2,LC1_event] = north_bound
-                        # LC2_bounds[3,LC1_event] = south_bound
-                        # LC2_bounds[4,LC1_event] = east_bound
-                        # LC2_bounds[5,LC1_event] = west_bound
-                        # LC2_event = LC2_event + 1
-                    # Store geographic center of all wave break events into seperate array 
-                    # wb_center[0,wb_event] = mean_lat
-                    # wb_center[1,wb_event] = mean_lon
-                # wb_event = wb_event + 1
-    # Create blank lists to return from WaveBreak.py if no overturning contours are identified 
+        # =============================================================================
+        #     
+        #     Ensure that the overturning exceeds 5 degrees of longitude (width) and ID the wavebreak type
+        #     
+        #     This is user-adjustable, so if larger or smaller width wave breaks can be identified
+        #     
+        #     Note: MATLAB round and roundn differ from Python's round function 
+        #     
+        #     MATLAB round: The round function rounds away from zero to the nearest integer with larger magnitude
+        #     
+        #     Python round: Numpy rounds to the nearest even value
+        #     
+        #     The below lines of code (id_cont line to the creation of LC1 and LC2 arrays) may appear 
+        #     and are overly-complicated. However, extensive de-bugging and testing revealed that 
+        #     having indentified contours as arrays in a list was the easiest way to store information
+        #     about wave breaking using this function.     
+        # =============================================================================
+            if c_ext_round[0,-1] == 1:
+                # Must start it at -1 to account for the +1 in line below
+                c_ext_round[0,-1] = -1
+            # Make a list of array(s) of identified overturning contours at a given theta level
+            id_cont = np.diff(c_ext_round[:,-1])
+            # This is very similar/identical to scounter_ext_C and ecounter_ext_C in WaveBreak.m
+            id_cont_idx = np.argwhere(id_cont != 0)
+            # Every other index is the start of a identified contour from id_cont_idx
+            scounter_ext_c = id_cont_idx[0::2]
+            ecounter_ext_c = id_cont_idx[1::2]
+            c_ext_round_list = []
+            for id_cont_counter, scounter in enumerate(scounter_ext_c):
+                scounter = int(scounter)
+                ecounter = int(ecounter_ext_c[id_cont_counter])
+                # Must add 2 to ecounter to account for Python not stopping at end index
+                if ecounter + 2 >= len(c_ext_round):
+                    c_ext_round_list.append(c_ext_round[scounter+1:,:2])
+                else:
+                    c_ext_round_list.append(c_ext_round[scounter+1:ecounter+1,:2])
+            # Create arrays for LC1 and LC2 events
+            LC1 = []
+            LC1_centroids = []
+            LC1_bounds = []
+            # LC1_bounds = np.empty((6,len(c_ext_round)))
+            # LC1_bounds[:] = np.nan
+           # LC1_cnt = []
+            LC2 = []
+            LC2_centroids = []
+            LC2_bounds = []
+            # LC2_bounds = np.empty((6,len(c_ext_round)))
+            # LC2_bounds[:] = np.nan
+            # LC1_event = 0
+            # LC2_event = 0
+            # wb_center = np.empty((2,len(c_ext_round)))
+            # wb_center[:] = np.nan
+            # wb_event = 0
+            for overturning_cont_coords in c_ext_round_list:
+                # Ensure that the beginning of the overturning is west of the end point of overturning - otherwise do not consider contour as overturning
+                # Does this ensure that cutoff-like features will be eliminated?
+                if overturning_cont_coords[0,-1] > overturning_cont_coords[-1,-1]:
+                    continue
+                else:
+                    # Turn the list into a numpy array to make indexing easier
+                    c_ext_round_arr = np.stack(overturning_cont_coords).squeeze()
+                    # Identify the farthest west longitude value
+                    lon_min_ovrt = np.min(c_ext_round_arr[:,1])
+                    # Identify the farthest east longitude value
+                    lon_max_ovrt = np.max(c_ext_round_arr[:,1])
+                    
+                    # Make sure to remove overturning contours not exceeding user-specified longitudinal width
+                    if lon_max_ovrt - lon_min_ovrt <= lon_width_thres:
+                        c_ext_round_arr[:] = np.nan
+                    else:
+                        # Calculate information about the geographic centroids and bounding region of the overturning contour
+                        mean_lat = np.mean(c_ext_round_arr[:,0])
+                        mean_lon = np.mean(c_ext_round_arr[:,1])
+                        # Farthest north and south latitude values
+                        north_bound = np.max(c_ext_round_arr[:,0])
+                        south_bound = np.min(c_ext_round_arr[:,0])
+                        # Farthest west and east longitude values
+                        west_bound = np.min(c_ext_round_arr[:,1])
+                        east_bound = np.max(c_ext_round_arr[:,1])
+                        # LC1_cnt.append()
+                        
+        # Check orientation of overturning to identify if it is LC1 (AWB) or LC2 (CWB) with functionality for Northern and Southern hemisphere
+                
+                        if c_ext_round_arr[0][0] > c_ext_round_arr[-1][0]: # This would AWB (NH) since the starting latitude of the contour is farther N
+                            if hemisphere == 'NH':  
+                                # Store all of the information about the overturning contour
+                                LC1.append(c_ext_round_arr)
+                                LC1_centroids.append([mean_lat,mean_lon])
+                            # LC1_bounds[0, LC1_event] = mean_lat
+                            # LC1_bounds[1,LC1_event] = mean_lon
+                                LC1_bounds.append([north_bound,south_bound,west_bound,east_bound])
+                            elif hemisphere == 'SH':
+                                LC2.append(c_ext_round_arr)
+                                LC2_centroids.append([mean_lat,mean_lon])
+                            # LC1_bounds[0, LC1_event] = mean_lat
+                            # LC1_bounds[1,LC1_event] = mean_lon
+                                LC2_bounds.append([north_bound,south_bound,west_bound,east_bound])
+                            # LC1_bounds[2,LC1_event] = north_bound
+                            # LC1_bounds[3,LC1_event] = south_bound
+                            # LC1_bounds[4,LC1_event] = east_bound
+                            # LC1_bounds[5,LC1_event] = west_bound
+                            # LC1_event = LC1_event + 1
+                        elif c_ext_round_arr[0][0] < c_ext_round_arr[-1][0]: # This would be CWB (NH) since the starting latitude of the contour is farther S
+                            if hemisphere == 'NH':
+                                # Store all of the information about the overturning contour
+                                LC2.append(c_ext_round_arr)
+                                LC2_centroids.append([mean_lat,mean_lon])
+                                LC2_bounds.append([north_bound,south_bound,west_bound,east_bound])
+                            elif hemisphere == 'SH':
+                                LC1.append(c_ext_round_arr)
+                                LC1_centroids.append([mean_lat,mean_lon])
+                            # LC1_bounds[0, LC1_event] = mean_lat
+                            # LC1_bounds[1,LC1_event] = mean_lon
+                                LC1_bounds.append([north_bound,south_bound,west_bound,east_bound])
+                            # LC2_bounds[0, LC1_event] = mean_lat
+                            # LC2_bounds[1,LC1_event] = mean_lon
+                            # LC2_bounds[2,LC1_event] = north_bound
+                            # LC2_bounds[3,LC1_event] = south_bound
+                            # LC2_bounds[4,LC1_event] = east_bound
+                            # LC2_bounds[5,LC1_event] = west_bound
+                            # LC2_event = LC2_event + 1
+                        # Store geographic center of all wave break events into seperate array 
+                        # wb_center[0,wb_event] = mean_lat
+                        # wb_center[1,wb_event] = mean_lon
+                    # wb_event = wb_event + 1
+        # Create blank lists to return from WaveBreak.py if no overturning contours are identified due to failing the length criteria
+        else:
+            c_round_cont_spur = []
+            c_round_cont = []
+            LC1 = []
+            LC2 = []
+            LC1_centroids = []
+            LC2_centroids = []
+            LC1_bounds = []
+            LC2_bounds = []
+            c_ext_round_arr = []
+    # Create blank lists to return from WaveBreak.py if no overturning contours are identified by the contour function 
     else:
         c_round_cont_spur = []
         c_round_cont = []
@@ -2627,7 +2640,288 @@ def RWB_events3(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, R
         matrix_cluster_mean_all.append(np.stack(matrix_cluster_mean))
         
     return np.array(matrix_cluster_mean_all).squeeze(), RWB_event
+
+def RWB_events4(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, RWB_width_thres, num_of_overturning ,utc_date_step=None):
+    event_centroids_mid = []
+    event_bounds_mid = []
+    isentrope_dist = []
+    RWB_event = []
+    matrix_cluster_mean = []
+    matrix_cluster_mean_all = []
+    isentrope_dist_all = []
+    possible_overturning_region_idx_all = []
+    for isentrope_c, centroids in enumerate(LC_centroids_all):
+                # Only analyze isentropes that have been found to be overturning
+                if len(centroids) > 0:
+                    for cen_idx,lat_lons in enumerate(centroids):
+                        if np.logical_and(lat_lons[1] >=360, lat_lons[1] <720):
+                            event_centroids_mid.append([lat_lons[0],lat_lons[1],theta_levels[isentrope_c]])  
+                            event_bounds_mid.append(LC_bounds_all[isentrope_c][cen_idx])
+    if len(event_centroids_mid) > 0:
+            event_centroids_mid = np.stack(event_centroids_mid)
+            event_bounds_mid = np.stack(event_bounds_mid)
+    
+    # Calculate the Haversine distance between identified overturning contours
+    for i, overt_cont in enumerate(event_centroids_mid):
+            same_isentropes = np.argwhere(event_centroids_mid[:,-1] == overt_cont[-1])
+            other_isentropes = np.argwhere(event_centroids_mid[:,-1] != overt_cont[-1])
+            isentrope_dist = np.zeros((len(event_centroids_mid)))
+            # Only calculate the Haversine distance for isentropes of different values (e.g., 310 K and 315 K distance not 310 K and 310 K distance)
+            for idxs in other_isentropes:
+                overt_cont2 = event_centroids_mid[:,:-1][idxs].squeeze()
+                isentrope_dist[idxs] = haversine(overt_cont[1], overt_cont[0], overt_cont2[1], overt_cont2[0], 'deg')
+            for idxs in same_isentropes:
+                if idxs != i:   
+                # Assign a NaN to isentropes of the same value 
+                        isentrope_dist[idxs] = np.nan
+        # If there is a 0, that is the overturning isentrope in question                 
+        # Identify instances where overturning isentropes occur within x degrees of each other
+            possible_overturning_region_idx = np.argwhere(np.logical_and(isentrope_dist < wavebreak_thres, isentrope_dist != 0)).squeeze()
+            # Add in the index of the isentrope that is being examined for overturning
+            possible_overturning_region_idx = np.sort(np.append(possible_overturning_region_idx,i))
+            isentrope_dist_all.append(isentrope_dist) 
+            # Cluster isentropes within the specified distance criteria
+            flag = False
+            for i_prior, prior in enumerate(possible_overturning_region_idx_all):
+                overlap = np.intersect1d(possible_overturning_region_idx, prior)
+                # Is there an isentrope that occurs within the distance criteria in multiple locations
+                if len(overlap) > 0:
+                    union = np.union1d(prior,possible_overturning_region_idx)
+                    # Cluster isentropes into same event 
+                    possible_overturning_region_idx_all[i_prior] = union
+                    flag = True
+            if flag == False:
+                possible_overturning_region_idx_all.append(possible_overturning_region_idx)
+    # Ensure that any repeat clusters (very rare)
+    for possible_evts in possible_overturning_region_idx_all:
+        repeat_evts = [int(np.array_equal(possible_evts,x)) for x in possible_overturning_region_idx_all]
+    # Identify if repeats occur
+    if np.sum(repeat_evts) > 0:
+        delete_repeat = np.argwhere(np.array(repeat_evts)==1)
+    # Delete the repeat overturning
+    no_output = possible_overturning_region_idx_all.pop(int(delete_repeat[-1][0]))
+    # Now remove any instance where there are not at least the number of user-specified overturnings                
+    for ii, possible_event in enumerate(possible_overturning_region_idx_all):
+        if len(possible_event) >= num_of_overturning:
+            RWB_event_cent = event_centroids_mid[possible_event]
+            overturning_region_bounds = event_bounds_mid[possible_event].squeeze() 
+            cont, row = np.shape(RWB_event_cent)
+            # Run an additional check to ensure that each set of isentropes is unique (e.g., there are not multiple 310 K isentropes making up an event)
+            isentrope_val,unique_isentrope  = np.unique(RWB_event_cent[:,-1],return_counts=True)
+            if np.sum(unique_isentrope > 1) > 0:
+                # Make sure the event consists of more than 3 overturning contours - if the event is 
+                # 3 overturning contours, then removal of a overturning contour will make event not meet criteria for an event
+                if cont == num_of_overturning:
+                # Event is not considered if the what is said above is true
+                    continue
+                else:
+                    # Find where the repeat isentrope is
+                    isentrope_idx           = np.argwhere(unique_isentrope>1) 
+                    # Find the value of the repeat isentrope
+                    repeat_isentrope_val    = isentrope_val[isentrope_idx]
+                    farthest_repeat_idx_all = []                   
+                    # Find the closest overturning between the repeated isentropes
+                    for repeat_isentrope_value in repeat_isentrope_val:
+                        repeat_isentrope_idx_in_event = np.argwhere(RWB_event_cent[:,-1] == repeat_isentrope_value)[:,-1]
+                        
+                        repeat_isentrope_dist_all = []
+                        for index, clustered_cntrs in enumerate(possible_event[repeat_isentrope_idx_in_event]):
+                            repeat_isentrope_dist = isentrope_dist_all[clustered_cntrs][possible_event]
+                            repeat_isentrope_dist_all.append(np.nansum(repeat_isentrope_dist))
+                        
+                        farthest_repeat_idx_all.append(repeat_isentrope_idx_in_event[np.argmax(repeat_isentrope_dist_all)])
+                    RWB_event_cent            = np.delete(RWB_event_cent,farthest_repeat_idx_all,axis=0)
+                    overturning_region_bounds = np.delete(overturning_region_bounds,farthest_repeat_idx_all,axis=0)
+                    possible_event            = np.delete(possible_event,farthest_repeat_idx_all,axis=0)
+    
+            # Must account for the three world lons when calculating if the width threshold is met
+    
+            RWB_event_lon_centroids  = RWB_event_cent[:,1]
+            RWB_event_lon_cent_range = np.max(RWB_event_lon_centroids) - np.min(RWB_event_lon_centroids)
+    
+            if RWB_event_lon_cent_range > 180:
+                RWB_lon_cen_pM_idx = np.argwhere(RWB_event_lon_centroids>=540)
+                # Subtract 360 to account for the issue at the prime meridian 
+                RWB_event_cent[RWB_lon_cen_pM_idx,1] -= 360
+                # Subtract 360 from same indices in overturning bounds array
+                # Index 2 and index 3 correspond to the longitude bounds 
+                for lon_b in range(2,3+1):
+                    overturning_region_bounds[overturning_region_bounds[:,lon_b]>=540,lon_b] -=360
+                    
+            # There are a few events with some isentropes being included even thought they are more than 15 degrees great circle 
+            # distance outside, so aim to eliminate these isentropes
+            # idx_to_delete = []
+            # for overt_c in possible_event:
+            #     overt_c_dist            = isentrope_dist_all[overt_c][possible_event].flatten()
+            #     overt_c_dist_exceed_idx = np.argwhere(overt_c_dist>wavebreak_thres)
+            #     for exceed_idxs in overt_c_dist_exceed_idx:
+            #         idx_to_delete.append(int(possible_event[exceed_idxs])) 
+            # overt_c_exceed,amount_exceed = np.unique(idx_to_delete,return_counts=True,axis=0)
+    
+            overt_c_exceed, amount_exceed = cluster_dist(isentrope_dist_all,possible_event,wavebreak_thres)
+            if np.sum(amount_exceed>1) > 0:
+                overt_c_to_delete_idx = np.argmax(amount_exceed)
+                possible_event_idx    = np.argwhere(overt_c_exceed[overt_c_to_delete_idx] == possible_event)
+                exceed                = amount_exceed[overt_c_to_delete_idx]
+                argmax_tie_check      = np.argwhere(amount_exceed[overt_c_to_delete_idx] == amount_exceed)
+                while exceed > 1:
+                    if len(argmax_tie_check) > 1:
+                    # It is possible for there to be multiple instances in an event where the maximum times that the threshold is exceeded is identical
+                    # at multiple overturnings (i.e., the first and last overturning are both greater than the threshold twice)
+                    # Argmax will only return the first index if this happens, so the below code ensures that if this happens - the overturning with
+                    # mean farthest distance is removed first (i.e., the mean distance where the threshold is exceeded is compared b/t overturnings )
+                        mean_dist_of_exceed_all = []
+                        for argmaxs in argmax_tie_check:
+                            outside_thres_idx = np.argwhere(isentrope_dist_all[int(overt_c_exceed[argmaxs])][possible_event]>wavebreak_thres)
+                            mean_dist_of_exceed_all.append(np.mean(isentrope_dist_all[int(overt_c_exceed[argmaxs])][possible_event][outside_thres_idx]))
+                        isentrope_to_del   = np.argmax(mean_dist_of_exceed_all)
+                        possible_event_idx = argmax_tie_check[isentrope_to_del]
+                        
+                    RWB_event_cent                = np.delete(RWB_event_cent,possible_event_idx,axis=0)
+                    overturning_region_bounds     = np.delete(overturning_region_bounds,possible_event_idx,axis=0)
+                    possible_event                = np.delete(possible_event,possible_event_idx,axis=0)
+                    overt_c_exceed, amount_exceed = cluster_dist(isentrope_dist_all,possible_event,wavebreak_thres)
+                    if len(overt_c_exceed) < 1:
+                        break
+                    else:
+                        overt_c_to_delete_idx         = np.argmax(amount_exceed)
+                        possible_event_idx            = np.argwhere(overt_c_exceed[overt_c_to_delete_idx]==possible_event)
+                        exceed                        = amount_exceed[overt_c_to_delete_idx]
+                        argmax_tie_check              = np.argwhere(amount_exceed[overt_c_to_delete_idx] == amount_exceed)
+    
+                # For events consisting of > 4 overturnings, there is typically an overturning that is more than 15 degrees away from the other
+                # overturnings causing the event to be removed. Remove any overturning that is far away from nearly all other overturnings 
+            # if len(RWB_event_cent) > 4:
+            #     idx_delete = np.argwhere(amount_exceed>2)
+            #     overt_c_to_delete = np.argwhere(possible_event == overt_c_exceed[idx_delete])
+            # else:    
+            #     idx_delete        = np.argwhere(amount_exceed>1)
+            #     overt_c_to_delete = np.argwhere(possible_event == overt_c_exceed[idx_delete])
+    
+            # RWB_event_cent            = np.delete(RWB_event_cent,overt_c_to_delete[:,-1],axis=0)
+            # overturning_region_bounds = np.delete(overturning_region_bounds,overt_c_to_delete[:,-1],axis=0)overturning_region_bounds
+            if len(RWB_event_cent) < num_of_overturning:
+                continue
+    
+                    # An event with multiple repeat isentropes (e.g., 350 K isentrope appears twice and the 360 K isentrope appears twice)
+                    # needs to be checked for distances for each set of repeated isentropes
+                    
+                    # Adopting Kevin's approach from Wavebreak_Identification... we will delete the first centroid of a repeated isentrope
+                    # RWB_event_cent = np.delete(RWB_event_cent,repeat_isentrope_idx_in_event[0],axis=0) 
+                    # Determine the appropriate isentrope for the identified event (minimize the distance) 
+    
+                    # for repeat_isentrope_value in repeat_isentrope_val:
+                    #     repeat_isentrope_idx_in_event = np.argwhere(RWB_event_cent[:,-1] == repeat_isentrope_val)[:,-1]
+                    #     repeat_isentrope_event = RWB_event_cent[repeat_isentrope_idx_in_event]
+                    #     repeat_isentrope_dist_all = []
+                    #     farthest_repeat_isentrope_idx_all = []
+                    #     # Recalculate the distances
+                    #     for repeat_isentrope_in_event in repeat_isentrope_event:
+                    #         repeat_isentrope_dist = haversine(repeat_isentrope_in_event[1], repeat_isentrope_in_event[0], 
+                    #                                                              RWB_event_cent[:,1], RWB_event_cent[:,0], 'deg')
+                            
+                    #         repeat_isentrope_dist_all.append(np.nansum(repeat_isentrope_dist))
+                    #     farthest_repeat_idx = np.argmax(repeat_isentrope_dist_all)
+                    #     RWB_event_cent              = np.delete(RWB_event_cent,repeat_isentrope_idx_in_event[farthest_repeat_idx],axis=0)
+                    #     overturning_region_bounds   = np.delete(overturning_region_bounds,repeat_isentrope_idx_in_event[farthest_repeat_idx],axis=0)
+                            # # Ensure that all contours are within the x degree threshold of each other
+                    # farthest_repeat_isentrope_idx = np.argwhere(repeat_isentrope_dist>wavebreak_thres)
+                    # if len(farthest_repeat_isentrope_idx) < 1:
+                    #     farthest_repeat_isentrope_idx_all.append(np.nan)
+                    # else:
+                    #     # The list comprehension in the append statement makes certain that we have a list of numbers (and not an array of arrays)
+                    #     farthest_repeat_isentrope_idx_all.append([int(far_idx) for far_idx in farthest_repeat_isentrope_idx])
+                    # repeat_isentrope_dist_all.append(np.nansum(repeat_isentrope_dist))
+                # If isentropes in question are within x degree threshold of all other contours - 
+                # the tiebreaker will be the shortest distance between repeat isentropes and rest of isentropes constituting an event
+                # if np.isnan(farthest_repeat_isentrope_idx_all).all():
+                #     farthest_repeat_isentrope_idx = int(np.argmin(repeat_isentrope_dist_all))
+                # else:
+                #     farthest_repeat_isentrope_idx = int(np.argwhere(~np.isnan(farthest_repeat_isentrope_idx_all)))
+                # idx_to_delete = np.argwhere(RWB_event_cent[:,:2] == RWB_event_cent[repeat_isentrope_idx_in_event][farthest_repeat_isentrope_idx][:2])[0][0]
+                
+                # RWB_event_cent = np.delete(RWB_event_cent,idx_to_delete,
+                #                            axis=0)
         
+            # RWB_second_world_idx    = np.argwhere(RWB_event_lon_centroids>360)
+            # if len(RWB_second_world_idx) > 1:
+            #     RWB_event_lon_centroids[RWB_second_world_idx] -= 360.
+            # There are a few events with extra isentropes appearing (relative to MATLAB version), so following portion ensures all
+            # isentropes are within 15 great circle distance
+            # RWB_event_cent_dist = np.zeros((1,len(RWB_event_cent)))
+            # for overt_c in range(0,len(RWB_event_cent)):
+            #     if overt_c == len(RWB_event_cent)-1:
+            #         RWB_event_cent_dist[:,overt_c] = rwb.haversine(RWB_event_cent[overt_c][1],RWB_event_cent[overt_c][0],RWB_event_cent[0][1],RWB_event_cent[0][0],'deg')
+            #     else:
+            #         RWB_event_cent_dist[:,overt_c] = rwb.haversine(RWB_event_cent[overt_c][1],RWB_event_cent[overt_c][0],RWB_event_cent[overt_c+1][1],RWB_event_cent[overt_c+1][0],'deg')
+    
+            # if (RWB_event_cent_dist > wavebreak_thres).sum():
+            #     dist_thres_exceed_idx    = np.argwhere(RWB_event_cent_dist > wavebreak_thres)
+            #     if dist_thres_exceed_idx.any() == len(np.squeeze(RWB_event_cent_dist)) - 2:
+            #         dist_thres_exceed_idx[dist_thres_exceed_idx==len(np.squeeze(RWB_event_cent_dist)) - 2] = -1
+            #     RWB_event_cent            = np.delete(RWB_event_cent,dist_thres_exceed_idx,axis=0)
+            #     overturning_region_bounds = np.delete(overturning_region_bounds,dist_thres_exceed_idx,axis=0) 
+    
+            # Identify the north, south, west, and east edges of the overturning region
+            north_bound = np.max(overturning_region_bounds[:,0])
+            south_bound = np.min(overturning_region_bounds[:,1])
+            west_bound  = np.min(overturning_region_bounds[:,2])
+            east_bound  = np.max(overturning_region_bounds[:,3])
+            # event_isentropes = RWB_event_cent[:,-1]
+            # Ensure that overturning region does not exceed 60 degrees longitude width
+            if east_bound - west_bound > RWB_width_thres:
+                # Pass through iteration in loop without appending to matrix
+                continue
+             # isn_sep     = np.diff(RWB_event_cent[:,-1])
+            # # Insert a dummy value for difference of the last element to make the same length as RWB_event_cent
+            # isn_sep     = np.append(isn_sep,0)
+            # Ensure that the overturning region occurs among similar magnitude isentropes by cutting any events with a difference 
+            # between overturning contours of more than 20 K (user-specified)
+            # elif (isn_sep>isentrope_separation).sum() > 0:
+            # # Determine where the large separation starts
+            #     isn_sep_idx    = np.argwhere(isn_sep>isentrope_separation)
+            # # Remove the overturning isentropes from the RWB event when they are  
+            #     # For instances where the warmest isentrope(s) are farthest away
+            #     if (isn_sep_idx > 1).sum() > 0:
+            #         RWB_event_cent = np.delete(RWB_event_cent,np.arange(isn_sep_idx+1,len(isn_sep)),axis=0)
+            #     else:
+            #         RWB_event_cent = np.delete(RWB_event_cent,isn_sep_idx,axis=0)
+    
+            if len(RWB_event_cent) >= num_of_overturning:    
+                # Ensure the final output is between 0 and 360 for longitude bounds and centroids
+                RWB_event_mean_lon = np.mean(RWB_event_cent[:,1])
+                if RWB_event_mean_lon>= 360:
+                    RWB_event_mean_lon -= 360
+                if west_bound>=360:
+                    west_bound -= 360
+                if east_bound>=360:
+                    east_bound -= 360
+                RWB_event.append(RWB_event_cent)
+                
+                # Ensure that the overturning region is within the first world lon bounds
+                if west_bound >=360.:
+                    west_bound -= 360.
+                elif east_bound >= 360.:
+                    east_bound -= 360.
+    
+                # Write the wave break information to the matrix cluster mean list
+                # Build in independence from utc_date_step
+                if utc_date_step == None:
+                    matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), RWB_event_mean_lon, np.mean(RWB_event_cent[:,2]),
+                                                     north_bound,south_bound,west_bound,east_bound])
+                else:   
+                    matrix_cluster_mean.append([np.mean(RWB_event_cent[:,0]), RWB_event_mean_lon, np.mean(RWB_event_cent[:,2]),
+                                                north_bound,south_bound,west_bound,east_bound, utc_date_step])
+    # For no RWBs identified 
+    if len(matrix_cluster_mean) < 1:
+        matrix_cluster_mean_all.append(matrix_cluster_mean)
+    # For RWBs that are identified
+    else:
+        # Convert the list into an array for easier usage
+        matrix_cluster_mean_all.append(np.stack(matrix_cluster_mean))
+        
+    return np.array(matrix_cluster_mean_all).squeeze(), RWB_event
+
 def cluster_dist(isentrope_dist_all,possible_event,wavebreak_thres):
     idx_to_delete = []
     for overt_c in possible_event:
