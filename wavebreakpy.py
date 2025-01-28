@@ -2693,14 +2693,21 @@ def RWB_events4(LC_centroids_all,LC_bounds_all, theta_levels, wavebreak_thres, R
             if flag == False:
                 possible_overturning_region_idx_all.append(possible_overturning_region_idx)
     # Ensure that any repeat clusters (very rare) are discarded so that repeat events are not captured
+    repeat_evts_all   = []
     if len(possible_overturning_region_idx_all) > 0:
         for possible_evts in possible_overturning_region_idx_all:
-            repeat_evts = [int(np.array_equal(possible_evts,x)) for x in possible_overturning_region_idx_all] 
+            repeat_evts_all.append([int(np.array_equal(possible_evts,x)) for x in possible_overturning_region_idx_all])
         # Identify if repeats occur
-        if np.sum(repeat_evts) > 0:
-            delete_repeat = np.argwhere(np.array(repeat_evts)==1)
-        # Delete the repeat overturning
-        no_output = possible_overturning_region_idx_all.pop(int(delete_repeat[-1][0]))
+        if len(repeat_evts_all)>0:
+            repeat_idx_to_del = []
+            for poss_count, possible_repeat in enumerate(repeat_evts_all):
+                if np.sum(possible_repeat)>1:
+                    repeat_idx_to_del.append(np.argwhere(np.array(possible_repeat)==1))
+            # Delete the repeat overturning - it will repeat due to comparing each element of the list to each other, so only grab the "unique"
+            # index of repeated values
+            repeat_idx_to_del_arr = np.unique(repeat_idx_to_del)
+            if len(repeat_idx_to_del_arr) > 0:
+                no_output = possible_overturning_region_idx_all.pop(int(repeat_idx_to_del_arr[-1]))
     # Now remove any instance where there are not at least the number of user-specified overturnings                
     for ii, possible_event in enumerate(possible_overturning_region_idx_all):
         if len(possible_event) >= num_of_overturning:
