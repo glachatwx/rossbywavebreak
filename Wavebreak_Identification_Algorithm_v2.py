@@ -88,7 +88,8 @@ for yr in years:
                                                             wavebreak_thres,RWB_width_thres,num_of_overturning,utc_date_step)
             matrix_LC2_cluster_mean, CWB_event = rwb.RWB_events3(LC2_centroids_all,LC2_bounds_all,theta_levels,
                                                                 wavebreak_thres,RWB_width_thres,num_of_overturning,utc_date_step)
-            # There is a somewhat rare probability that there will be repeat events, so ensure that these events are not captured
+            # Repeat events have been discovered, so ensure that these events are not captured
+            ####################################
             if matrix_LC1_cluster_mean.ndim == 2:  
                 for indx_del_LC1, LC1_evts in enumerate(matrix_LC1_cluster_mean):
                     ans = [int(np.array_equal(LC1_evts,x)) for x in matrix_LC1_cluster_mean]
@@ -119,6 +120,8 @@ for yr in years:
             # For time steps with a single event, no need to check for repeat events
             elif np.logical_and(len(matrix_LC2_cluster_mean)>0,matrix_LC2_cluster_mean.ndim == 1):
                 matrix_LC2_cluster_mean_all.append(matrix_LC2_cluster_mean)
+            ########################################
+        
             # Clear out the lists for each time step 
             LC1_centroids_all = []
             LC2_centroids_all = []
