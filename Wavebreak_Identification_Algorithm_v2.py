@@ -95,9 +95,6 @@ for yr in years:
                     ans = [int(np.array_equal(LC1_evts,x)) for x in matrix_LC1_cluster_mean]
                     if np.sum(ans) > 1:
                         matrix_LC1_cluster_mean = np.delete(matrix_LC1_cluster_mean,indx_del_LC1,axis=0)
-                        # Once repeat event is removed, make sure to break loop if the size of the matrix_LC*_cluster_mean will disrupt script
-                        if len(matrix_LC1_cluster_mean) - 1 == indx_del_LC1:
-                            break
                 # Make sure to add the time step of the identified wave break  
                 matrix_LC1_cluster_mean_all.append(matrix_LC1_cluster_mean)
             # For time steps without an event, do not append blank array
@@ -112,9 +109,6 @@ for yr in years:
                     ans = [int(np.array_equal(LC2_evts,x)) for x in matrix_LC2_cluster_mean]
                     if np.sum(ans) > 1:
                         matrix_LC2_cluster_mean = np.delete(matrix_LC2_cluster_mean,indx_del_LC2,axis=0)
-                        # Once repeat event is removed, make sure to break loop if the size of the matrix_LC*_cluster_mean will disrupt script
-                        if len(matrix_LC2_cluster_mean) - 1 == indx_del_LC2:
-                            break
                 matrix_LC2_cluster_mean_all.append(matrix_LC2_cluster_mean)
             # For time steps without an event, do not append blank array
             # For time steps with a single event, no need to check for repeat events
